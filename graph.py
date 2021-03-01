@@ -1,34 +1,50 @@
 # Graph and Vertex classes.
 from pyglet.sprite import Sprite
 from colordata import colors
+from MaxHeap import MaxHeap
+from time import sleep
 
 class Vertex(Sprite):
-	def __init__(self, x, y, img, color, spriteBatch=None, neighbors=[], blocked=False):
+	def __init__(self, x, y, img, color, spriteBatch=None, blocked=False):
 		Sprite.__init__(self, x=x, y=y, img=img, batch=spriteBatch)
 		self.x = x
 		self.y = y
-		self.neighbors = neighbors;
-		self.visited = False
+		self.neighbors = [];
 		self.blocked = blocked
 		self.color = color
+		# for pathfinding
+		self.visited = False
+		self.cameFrom = None
+		self.g = float('inf')
+		self.h = 0
+		self.f = self.g + self.h 
 
-	# Changes the vertex's status back to unvisited.
+	# Changes the vertex's status back to pre-pathfinding.
 	def reset(self):
-		self.visited = false
+		self.visited = False
+		self.cameFrom = None
+		self.g = float('inf')
+		self.h = 0
+		self.f = self.g + self.h 
 
-	# Changes this vertex to a block.
+	# Sets this vertex to a block.
 	def block(self):
 		self.blocked = True
 
+	# Sets this vertex to be open.
 	def unblock(self):
 		self.blocked = False
 
+	def __repr__(self):
+		return str((self.x, self.y))
+
 class Graph():
 
-	def __init__(self, V=[], E=[]):
-		self.V = V
-		self.E = E
+	def __init__(self):
+		self.V = []
+		self.E = []
 		self.endpoints = [] # reserved for pathfinding.
+		self.current_path = [] # reserved for pathfinding.
 		self.blocked = []
 
 	# Adds a vertex to the graph. Assumes vertex is not already in the graph.
@@ -71,11 +87,11 @@ class Graph():
 			self.unblockv(v)
 		assert not self.blocked
 
-	# updates the color of the given vertex. Assumes it's in the graph. 
-	def updateColor(self, v, current_path=[]):
-		if v in self.endpoints:
+	# Updates the color of the given vertex. Assumes it's in the graph. 
+	def updateColor(self, v):
+		if self.endpoints and v in self.endpoints:
 			v.color = colors['endpoint']
-		elif v in current_path:
+		elif self.current_path and v in self.current_path:
 			v.color = colors['on_path']
 		elif v.blocked:
 			v.color = colors['block']
@@ -84,8 +100,65 @@ class Graph():
 		else:
 			v.color = colors['open']
 
-	# Returns the resulting path of the A_Star search from v1, v2.
-	def AStarSearch(self, v1, v2):
-		pass
+	# Adds v as an endpoint for pathfinding. Keeps the 2 most recent added endpoints.
+	def pushEndpoint(self, v):
+		if v not in self.endpoints:
+			self.endpoints.append(v)
+			if len(self.endpoints) > 2:
+				self.updateColor(self.endpoints.pop(0))
+			self.updateColor(v)
 
-		
+	# Performs A_Star search from v1 to v2. Updates the graph's current_path.
+	def AStarSearch(self, v1, v2):
+		self.resetPathfinding()
+		comparer = lambda v,w: w.f - v.f
+		openQ = MaxHeap(comparator=comparer)
+		v1.f, v1.g = 0, 0
+		openQ.push(v1)
+		while not openQ.is_empty():
+			cur = openQ.pop()
+			for v in cur.neighbors:
+				if v.visited or v.blocked:
+					continue
+				v.cameFrom = cur
+				v.visited = True
+				self.updateColor(v)
+				if v == v2:
+					self.current_path = self.getpath(v1, v2, [])
+					for w in self.current_path:
+						self.updateColor(w)
+					return
+				v.g = cur.g
+				v.h = self.manhattan_d(v, v2)
+				v.f = v.g + v.h
+				openQ.push(v)
+
+	# Does AStar pathfinding from the current endpoints of this graph.
+	def pathfindFromEnds(self):
+		assert len(self.endpoints) == 2, "Needs 2 endpoints"
+		self.AStarSearch(self.endpoints[0], self.endpoints[1])
+
+	# Assuming there is a path from e to s from e's parent vertices, returns said path in an array.
+	def getpath(self, s, e, arr):
+		arr.append(e)
+		if s == e:
+			arr.reverse()
+			return arr
+		return self.getpath(s, e.cameFrom, arr)
+
+	# Returns the Manhattan heuristic distance.
+	def manhattan_d(self, v1, v2):
+		return abs(v1.x - v2.x) + abs(v1.y - v2.y)
+
+	# Resets the entire graph's state to default.
+	def resetAll(self):
+		self.endpoints = []
+		self.resetPathfinding()
+		self.purgeBlocks()
+
+	# Resets the graph to pre-pathfinding.
+	def resetPathfinding(self):
+		self.current_path = []
+		for v in self.V:
+			v.reset()
+			self.updateColor(v)

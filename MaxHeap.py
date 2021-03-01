@@ -2,15 +2,13 @@
 
 class MaxHeap():
 
-	def __init__(self, comparator=lambda x,y: x-y, items=[]):
+	def __init__(self, comparator):
 		self.comparator = comparator # A function used to compare items.
 		self.size = 0
 		self.items = []
-		for item in items:
-			slef.insert(item)
 
 	# Inserts an item into the Heap.
-	def insert(self, item):
+	def push(self, item):
 		self.items.append(item)
 		self.size += 1
 		self.adjustUp(self.size - 1)
